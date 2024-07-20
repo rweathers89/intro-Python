@@ -2,7 +2,7 @@
 
 ## Exercise 1.1
 
-## Install and Setup Python
+### Install and Setup Python
 
 - First, install Python 3.8.7 on your system. Check your Python version by using the command `python --version` from your terminal.
 
