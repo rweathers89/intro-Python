@@ -22,24 +22,38 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS Recipes(
 
 # main menu function
 def main_menu(conn, cursor):
-    choice = ""
-    while(choice!= "quit"):
+    
+    while True:
         print("Main Menu")
         print("-------------")
-        print("Pick a choice:")
+        #print("Select an option:")
         print("1. Create a new recipe")
         print("2. Search for a recipe by ingredient")
         print("3. Update an existing recipe")
         print("4. Delete a recipe")
+        print("5. Exit")
 
-        if choice == "1":
-            create_recipe(conn, cursor)
-        elif choice == "2":
-            search_recipe(conn, cursor)
-        elif choice == "3":
-            update_recipe(conn, cursor)
-        elif choice == "4":
-            delete_recipe(conn, cursor)
+        choice = int(input("Select an option: "))
+        if choice in [1, 2, 3, 4]:
+            
+            if choice == 1:
+                create_recipe(conn, cursor)
+            elif choice == 2:
+                search_recipe(conn, cursor)
+            elif choice == 3:
+                update_recipe(conn, cursor)
+            elif choice == 4:
+                delete_recipe(conn, cursor)
+        elif choice == 5:
+            print("Thanks for using the Recipe App!")
+            conn.commit()
+            cursor.close()
+            conn.close()
+            break
+        else:
+            print("Invalid choice. Please enter 1, 2, 3, 4, or quit.")
+               
+  
 
 def create_recipe(conn, cursor):
     recipe_ingredients = []
@@ -52,7 +66,7 @@ def create_recipe(conn, cursor):
     recipe_ingredients_str = ", ".join(recipe_ingredients)
    
     # SQL statment
-    sql = 'INSER INTO Recipes (name, ingredients, cooking_time, difficulty) VALUES (%s, %s, %s, %s)'
+    sql = 'INSERT INTO Recipes (name, ingredients, cooking_time, difficulty) VALUES (%s, %s, %s, %s)'
     val = (name, recipe_ingredients_str, cooking_time, difficulty)
     
     # execute SQL statment to insert recipe into table
@@ -73,17 +87,139 @@ def calculate_difficulty(cooking_time, ingredients):
         return "Hard"
     
 
-
 def search_recipe(conn, cursor):
-    all_ingredients = []
+    cursor.execute("SELECT DISTINCT ingredients FROM Recipes")
+    results = cursor.fetchall()
+
+    all_ingredients = set()
+    for row in results:
+        ingredients = row[0]
+        all_ingredients.update(ingredients.split(', '))
+
+    print("\nAvailable ingredients:")
+    for idx, ingredient in enumerate(sorted(all_ingredients), start=1):
+        print(f"{idx}. {ingredient}")
+
+    choice = int(input("Choose an ingredient by number to search: ")) - 1
+    search_ingredient = sorted(all_ingredients)[choice]
+
+    search_query = "SELECT * FROM Recipes WHERE ingredients LIKE %s"
+    cursor.execute(search_query, ('%' + search_ingredient + '%',))
+    
+    results = cursor.fetchall()
+    if results:
+        for row in results:
+            print(row)
+    else:
+        print("No recipes found with that ingredient.")
+
+
+def update_recipe(conn, cursor):
+    cursor.execute("SELECT id, name FROM Recipes")
+    results = cursor.fetchall()
+
+    print("\nAvailable recipes:\n")
+    for idx, row in enumerate(results, start=1):
+        print(f"{idx}. {row[1]}")
+
+    try:
+        selection = int(input("\nEnter the number of the recipe to update: "))
+        if selection not in range(1, len(results) + 1):
+            print("Please select a valid option.")
+            return  # Exit the function
+    except ValueError:
+        print("Please select a valid option.")
+        return  # Exit the function
+
+    recipe_id = results[selection - 1][0]
+    print("Recipe ID:", recipe_id)
+    
+    cursor.execute("SELECT name, ingredients, cooking_time, difficulty FROM Recipes WHERE id = %s", (recipe_id,))
+    selected_recipe = cursor.fetchone()
+    #print("Selected recipe:", selected_recipe)
+
+    print("\n  1. Name")
+    print("  2. Cooking time")
+    print("  3. Ingredients")
+
+    try:
+        column = int(input("\nEnter the number of the column to update: "))
+        if column not in range(1, 4):
+            print("\nPlease select a valid option")
+            return  # Exit the function
+    except ValueError:
+        print("\nPlease select a valid option")
+        return  # Exit the function
+
+    if column == 1:
+        new_value = input("\nEnter a new name for the recipe: ")
+        cursor.execute("UPDATE Recipes SET name = %s WHERE id = %s", (new_value, recipe_id))
+
+    elif column == 2:
+        new_value = input("\nEnter a new cooking time for your recipe: ")
+        cursor.execute("UPDATE Recipes SET cooking_time = %s WHERE id = %s", (new_value, recipe_id))
+        cursor.execute("SELECT ingredients FROM Recipes WHERE id = %s", (recipe_id,))
+
+        # Fetch the updated ingredients and recalculate difficulty
+        ingredients = cursor.fetchone()[0].split(", ")
+        cursor.execute("UPDATE Recipes SET difficulty = %s WHERE id = %s",
+                       (calculate_difficulty(int(new_value), ingredients), recipe_id))
+
+    elif column == 3:
+        new_value = input("\nAdd any new ingredients: ")
+        cursor.execute("SELECT ingredients, cooking_time FROM Recipes WHERE id = %s", (recipe_id,))
+        row = cursor.fetchone()
+        existing_ingredients = row[0].split(", ")
+        cooking_time = row[1]
+
+        # Append the new ingredients to the existing list
+        new_ingredients = new_value.split(", ")
+        updated_ingredients = existing_ingredients + new_ingredients
+
+        # Update the database with the modified list of ingredients
+        updated_ingredients_str = ", ".join(updated_ingredients)
+        cursor.execute("UPDATE Recipes SET ingredients = %s WHERE id = %s", (updated_ingredients_str, recipe_id))
+
+        # Recalculate difficulty based on updated cooking time and ingredients
+        cursor.execute("UPDATE Recipes SET difficulty = %s WHERE id = %s",
+                    (calculate_difficulty(cooking_time, updated_ingredients), recipe_id))
+
+
+    conn.commit()
+    print("\nYour recipe has been updated!\n")
+    print("-----------------\n")
+
+def delete_recipe(conn, cursor):
+    cursor.execute("SELECT id, name FROM Recipes")
+    recipes = cursor.fetchall()
+    
+    print("\nExisting recipes:")
+    for row in recipes:
+        print(f"ID: {row[0]}, Name: {row[1]}")
+
+    recipe_id = int(input("Enter the ID of the recipe to delete: "))
+
+    delete_query = "DELETE FROM Recipes WHERE id = %s"
+    cursor.execute(delete_query, (recipe_id,))
+    conn.commit()
+    print("Recipe deleted successfully!")
+
+
+main_menu(conn, cursor)
+#conn.close()
+
+'''
+def search_recipe(conn, cursor):
     # fetch ingredients from the table
     cursor.execute("SELECT ingredients FROM Recipes")
     results = cursor.fetchall()
+    
+    all_ingredients = set()
     # Loop through results
-    for ingredients_list in results:
-        for recipe_ingredients in ingredients_list:
-            recipe_ingredients_list = recipe_ingredients.split(", ")
-            all_ingredients.extend(recipe_ingredients_list)
+    for row in results:
+        for ingredient in row:
+            ingredient_list = ingredient.split(", ")
+            all_ingredients.update(ingredient_list)
    
     #Remove duplicates from list
     all_ingredients = list(dict.fromkeys(all_ingredients))
@@ -108,14 +244,13 @@ def search_recipe(conn, cursor):
 
     # search for recipes containing the selected ingredient
     sql = "SELECT name, ingredients, cooking_time, difficulty FROM Recipes WHERE ingredients LIKE %s)"
-    val = ("%" + search_ingredient + "%")
+    val = (f"% {search_ingredient} %")
 
     cursor.execute(sql, val)
     search_results = cursor.fetchall()
     print("Recipes containing the ingredient: ")
     for row in search_results:
         print(row)
-
 
 def update_recipe(conn, cursor):
     cursor.execute("SELECT * FROM Recipes")
@@ -191,6 +326,7 @@ def delete_recipe(conn, cursor):
     cursor.execute("SELECT * FROM Recipes")
     results = cursor.fetchall()
     print("Available Recipes")
+    print(results)
     recipe_to_delete = int(input("Enter the ID of the recipe you want to delete: "))
     # Delete the recipe
     cursor.execute("DELETE FROM Recipes WHERE id = (%s)", (recipe_to_delete))
@@ -198,5 +334,4 @@ def delete_recipe(conn, cursor):
     conn.commit()
     print("Recipe deleted")
 
-
-conn.close()
+'''
